@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>高级音频播放器</title>
+  <!-- 引入Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入Font Awesome -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  
+  <!-- 配置Tailwind自定义颜色和字体 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#3B82F6',
+            secondary: '#10B981',
+            dark: '#1E293B',
+            light: '#F8FAFC'
+          },
+          fontFamily: {
+            inter: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <!-- 自定义工具类 -->
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .player-shadow {
+        box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1);
+      }
+      .progress-thumb {
+        transform: scale(0);
+        transition: transform 0.2s ease;
+      }
+      .progress-container:hover .progress-thumb {
+        transform: scale(1);
+      }
+    }
+  </style>
+  
+  <style>
+    /* 自定义滚动条 */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #a1a1a1;
+    }
+    
+    /* 音频可视化效果 */
+    .visualizer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      height: 40px;
+    }
+    .visualizer-bar {
+      width: 3px;
+      background: linear-gradient(to top, #3B82F6, #10B981);
+      border-radius: 3px;
+      transition: height 0.2s ease;
+    }
+  </style>
+</head>
+
+<body class="bg-gradient-to-br from-light to-gray-100 min-h-screen font-inter text-dark flex items-center justify-center p-4">
+  <div class="audio-player w-full max-w-md bg-white rounded-2xl player-shadow overflow-hidden transition-all duration-300 hover:shadow-lg">
+    <!-- 播放器头部 -->
+    <div class="bg-gradient-to-r from-primary to-secondary p-6 text-white">
+      <h1 class="text-[clamp(1.2rem,3vw,1.5rem)] font-bold mb-1">音频播放器</h1>
+      <p class="text-white/80 text-sm" id="audio-title">未播放音频</p>
+    </div>
+    
+    <!-- 音频可视化区域 -->
+    <div class="p-6 flex justify-center">
+      <div class="visualizer" id="visualizer">
+        <!-- 可视化条将通过JS动态生成 -->
+      </div>
+    </div>
+    
+    <!-- 音频元素 (默认隐藏) -->
+    <audio id="audio-player" src="/Users/ysp/Desktop/xsz happy birthday.mp3" preload="metadata"></audio>
+    
+    <!-- 播放控制区域 -->
+    <div class="px-6 pb-6 space-y-6">
+      <!-- 进度条 -->
+      <div class="space-y-2">
+        <div class="flex justify-between text-xs text-gray-500">
+          <span id="current-time">00:00</span>
+          <span id="total-time">00:00</span>
+        </div>
+        
+        <div class="progress-container relative h-2 bg-gray-200 rounded-full cursor-pointer group" id="progress-container">
+          <div class="absolute left-0 top-0 h-full bg-gradient-to-r from-primary to-secondary rounded-full" id="progress-bar" style="width: 0%"></div>
+          <div class="progress-thumb absolute h-4 w-4 bg-white border-2 border-primary rounded-full -mt-1" id="progress-thumb" style="left: 0%"></div>
+        </div>
+      </div>
+      
+      <!-- 主要控制按钮 -->
+      <div class="flex items-center justify-between">
+        <button class="text-gray-500 hover:text-primary transition-colors" id="speed-btn">
+          <i class="fa fa-tachometer"></i>
+          <span class="ml-1 text-sm">1.0x</span>
+        </button>
+        
+        <button class="text-gray-600 hover:text-primary transition-colors" id="rewind-btn">
+          <i class="fa fa-step-backward text-xl"></i>
+        </button>
+        
+        <button class="w-14 h-14 rounded-full bg-gradient-to-r from-primary to-secondary text-white flex items-center justify-center shadow-lg hover:scale-105 transition-all" id="play-pause-btn">
+          <i class="fa fa-play text-xl"></i>
+        </button>
+        
+        <button class="text-gray-600 hover:text-primary transition-colors" id="forward-btn">
+          <i class="fa fa-step-forward text-xl"></i>
+        </button>
+        
+        <div class="flex items-center space-x-2" id="volume-control">
+          <i class="fa fa-volume-up text-gray-500" id="volume-icon"></i>
+          <input type="range" min="0" max="1" step="0.05" value="1" class="w-16 accent-primary" id="volume-slider">
+        </div>
+      </div>
+      
+      <!-- 播放速度选择器 (默认隐藏) -->
+      <div class="hidden absolute bg-white rounded-lg shadow-xl p-3 w-36 z-10" id="speed-menu">
+        <div class="flex flex-col space-y-2">
+          <button class="speed-option text-left px-2 py-1 hover:bg-gray-100 rounded" data-speed="0.5">0.5x</button>
+          <button class="speed-option text-left px-2 py-1 hover:bg-gray-100 rounded" data-speed="0.75">0.75x</button>
+          <button class="speed-option text-left px-2 py-1 bg-primary/10 text-primary rounded" data-speed="1">1.0x</button>
+          <button class="speed-option text-left px-2 py-1 hover:bg-gray-100 rounded" data-speed="1.25">1.25x</button>
+          <button class="speed-option text-left px-2 py-1 hover:bg-gray-100 rounded" data-speed="1.5">1.5x</button>
+          <button class="speed-option text-left px-2 py-1 hover:bg-gray-100 rounded" data-speed="2">2.0x</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 获取DOM元素
+    const audioPlayer = document.getElementById('audio-player');
+    const playPauseBtn = document.getElementById('play-pause-btn');
+    const progressBar = document.getElementById('progress-bar');
+    const progressThumb = document.getElementById('progress-thumb');
+    const progressContainer = document.getElementById('progress-container');
+    const currentTimeEl = document.getElementById('current-time');
+    const totalTimeEl = document.getElementById('total-time');
+    const volumeSlider = document.getElementById('volume-slider');
+    const volumeIcon = document.getElementById('volume-icon');
+    const rewindBtn = document.getElementById('rewind-btn');
+    const forwardBtn = document.getElementById('forward-btn');
+    const speedBtn = document.getElementById('speed-btn');
+    const speedMenu = document.getElementById('speed-menu');
+    const speedOptions = document.querySelectorAll('.speed-option');
+    const audioTitle = document.getElementById('audio-title');
+    const visualizer = document.getElementById('visualizer');
+    
+    // 设置音频标题
+    function setAudioTitle() {
+      // 从音频URL提取文件名作为标题
+      const url = audioPlayer.src;
+      const fileName = url.split('/').pop().replace('.mp3', '');
+      audioTitle.textContent = fileName || '正在播放音频';
+    }
+    
+    // 创建音频可视化条
+    function createVisualizerBars() {
+      visualizer.innerHTML = '';
+      // 创建30个可视化条
+      for (let i = 0; i < 30; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'visualizer-bar';
+        bar.style.height = '5px'; // 初始高度
+        visualizer.appendChild(bar);
+      }
+    }
+    
+    // 更新可视化效果
+    function updateVisualizer() {
+      const bars = document.querySelectorAll('.visualizer-bar');
+      if (!bars.length) return;
+      
+      // 只有在播放时才更新可视化效果
+      if (audioPlayer.paused) {
+        bars.forEach(bar => {
+          bar.style.height = '5px';
+        });
+        return;
+      }
+      
+      // 生成随机高度模拟音频波形
+      bars.forEach(bar => {
+        const height = Math.floor(Math.random() * 35) + 5; // 5-40px
+        bar.style.height = `${height}px`;
+      });
+    }
+    
+    // 格式化时间（将秒转换为分:秒格式）
+    function formatTime(seconds) {
+      if (isNaN(seconds)) return '00:00';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // 更新进度条
+    function updateProgress() {
+      if (isNaN(audioPlayer.duration)) return;
+      
+      const percent = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+      progressBar.style.width = `${percent}%`;
+      progressThumb.style.left = `${percent}%`;
+      currentTimeEl.textContent = formatTime(audioPlayer.currentTime);
+    }
+    
+    // 设置进度
+    function setProgress(e) {
+      const width = progressContainer.clientWidth;
+      const clickX = e.offsetX;
+      const duration = audioPlayer.duration;
+      audioPlayer.currentTime = (clickX / width) * duration;
+    }
+    
+    // 切换播放/暂停状态
+    function togglePlayPause() {
+      if (audioPlayer.paused) {
+        audioPlayer.play()
+          .then(() => {
+            playPauseBtn.innerHTML = '<i class="fa fa-pause text-xl"></i>';
+          })
+          .catch(error => {
+            console.error('播放失败:', error);
+            alert('音频播放失败，请检查文件路径是否正确。');
+          });
+      } else {
+        audioPlayer.pause();
+        playPauseBtn.innerHTML = '<i class="fa fa-play text-xl"></i>';
+      }
+    }
+    
+    // 更新音量图标
+    function updateVolumeIcon() {
+      const volume = audioPlayer.volume;
+      if (volume === 0) {
+        volumeIcon.className = 'fa fa-volume-off text-gray-500';
+      } else if (volume < 0.5) {
+        volumeIcon.className = 'fa fa-volume-down text-gray-500';
+      } else {
+        volumeIcon.className = 'fa fa-volume-up text-gray-500';
+      }
+    }
+    
+    // 设置音量
+    function setVolume() {
+      audioPlayer.volume = volumeSlider.value;
+      updateVolumeIcon();
+    }
+    
+    // 切换静音
+    function toggleMute() {
+      audioPlayer.muted = !audioPlayer.muted;
+      if (audioPlayer.muted) {
+        volumeIcon.className = 'fa fa-volume-off text-gray-500';
+      } else {
+        updateVolumeIcon();
+      }
+    }
+    
+    // 快退10秒
+    function rewind() {
+      audioPlayer.currentTime = Math.max(0, audioPlayer.currentTime - 10);
+    }
+    
+    // 快进10秒
+    function forward() {
+      audioPlayer.currentTime = Math.min(audioPlayer.duration, audioPlayer.currentTime + 10);
+    }
+    
+    // 设置播放速度
+    function setPlaybackSpeed(speed) {
+      audioPlayer.playbackRate = speed;
+      speedBtn.innerHTML = `<i class="fa fa-tachometer"></i><span class="ml-1 text-sm">${speed}x</span>`;
+      
+      // 更新选中状态
+      speedOptions.forEach(option => {
+        if (parseFloat(option.dataset.speed) === speed) {
+          option.classList.add('bg-primary/10', 'text-primary');
+        } else {
+          option.classList.remove('bg-primary/10', 'text-primary');
+        }
+      });
+      
+      // 隐藏速度菜单
+      speedMenu.classList.add('hidden');
+    }
+    
+    // 切换速度菜单显示状态
+    function toggleSpeedMenu() {
+      speedMenu.classList.toggle('hidden');
+      // 定位速度菜单
+      const rect = speedBtn.getBoundingClientRect();
+      speedMenu.style.top = `${rect.bottom + window.scrollY + 5}px`;
+      speedMenu.style.left = `${rect.left + window.scrollX}px`;
+    }
+    
+    // 点击外部关闭速度菜单
+    document.addEventListener('click', (e) => {
+      if (!speedBtn.contains(e.target) && !speedMenu.contains(e.target)) {
+        speedMenu.classList.add('hidden');
+      }
+    });
+    
+    // 事件监听器
+    playPauseBtn.addEventListener('click', togglePlayPause);
+    progressContainer.addEventListener('click', setProgress);
+    audioPlayer.addEventListener('timeupdate', updateProgress);
+    volumeSlider.addEventListener('input', setVolume);
+    volumeIcon.addEventListener('click', toggleMute);
+    rewindBtn.addEventListener('click', rewind);
+    forwardBtn.addEventListener('click', forward);
+    speedBtn.addEventListener('click', toggleSpeedMenu);
+    
+    // 音频加载完成后更新总时长
+    audioPlayer.addEventListener('loadedmetadata', () => {
+      totalTimeEl.textContent = formatTime(audioPlayer.duration);
+      setAudioTitle();
+    });
+    
+    // 音频播放结束后重置播放按钮
+    audioPlayer.addEventListener('ended', () => {
+      playPauseBtn.innerHTML = '<i class="fa fa-play text-xl"></i>';
+    });
+    
+    // 播放速度选项点击事件
+    speedOptions.forEach(option => {
+      option.addEventListener('click', () => {
+        const speed = parseFloat(option.dataset.speed);
+        setPlaybackSpeed(speed);
+      });
+    });
+    
+    // 初始化
+    window.addEventListener('DOMContentLoaded', () => {
+      createVisualizerBars();
+      // 每秒更新一次可视化效果
+      setInterval(updateVisualizer, 100);
+    });
+  </script>
+</body>
+</html>
